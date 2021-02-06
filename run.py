@@ -58,16 +58,13 @@ if len(sys.argv) > 1 and (sys.argv[1] == 'train' or sys.argv[1] == 'extratrain')
     (sourceCorpus, targetCorpus, sourceDev, targetDev) = pickle.load(open(corpusDataFileName, 'rb'))
     (sourceWord2ind, targetWord2ind) = pickle.load(open(wordsDataFileName, 'rb'))
 
-    word2indENG = utils.getDictionary(sourceCorpus, startToken, endToken, unkToken, padToken)
-    word2indBG = utils.getDictionary(targetCorpus, startToken, endToken, unkToken, padToken)
-
-    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, word2indENG, word2indBG, unkToken,
+    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, sourceWord2ind, targetWord2ind, unkToken,
                          padToken, endToken).to(device)
     optimizer = torch.optim.Adam(nmt.parameters(), lr=learning_rate)
 
     if sys.argv[1] == 'extratrain':
         nmt.load(modelFileName)
-        (bestPerplexity, learning_rate, osd) = torch.load(modelFileName + '.optim')
+        (bestPerplexity, learning_rate, osd) = torch.load(modelFileName + '.optim', map_location="cpu")
         optimizer.load_state_dict(osd)
         for param_group in optimizer.param_groups:
             param_group['lr'] = learning_rate
@@ -170,7 +167,6 @@ if len(sys.argv) > 3 and sys.argv[1] == 'perplexity':
 
 if len(sys.argv) > 3 and sys.argv[1] == 'translate':
     (sourceWord2ind, targetWord2ind) = pickle.load(open(wordsDataFileName, 'rb'))
-
     sourceTest = utils.readCorpus(sys.argv[2])
 
     nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, sourceWord2ind, targetWord2ind,
@@ -178,11 +174,13 @@ if len(sys.argv) > 3 and sys.argv[1] == 'translate':
     nmt.load(modelFileName)
 
     nmt.eval()
-    file = open(sys.argv[3], 'w')
+    file = open(sys.argv[3], 'w', encoding="utf8")
     pb = utils.progressBar()
     pb.start(len(sourceTest))
     for s in sourceTest:
-        file.write(' '.join(nmt.translateSentence(s)) + "\n")
+        sent = nmt.translateSentence(s)
+        print(' '.join(sent))
+        file.write(' '.join(sent) + "\n")
         pb.tick()
     pb.stop()
 
