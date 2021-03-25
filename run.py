@@ -58,13 +58,13 @@ if len(sys.argv) > 1 and (sys.argv[1] == 'train' or sys.argv[1] == 'extratrain')
     (sourceCorpus, targetCorpus, sourceDev, targetDev) = pickle.load(open(corpusDataFileName, 'rb'))
     (sourceWord2ind, targetWord2ind) = pickle.load(open(wordsDataFileName, 'rb'))
 
-    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, sourceWord2ind, targetWord2ind, unkToken,
-                         padToken, endToken).to(device)
+    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, layers, device, sourceWord2ind, targetWord2ind,
+                         unkToken, padToken, endToken, startToken).to(device)
     optimizer = torch.optim.Adam(nmt.parameters(), lr=learning_rate)
 
     if sys.argv[1] == 'extratrain':
         nmt.load(modelFileName)
-        (bestPerplexity, learning_rate, osd) = torch.load(modelFileName + '.optim', map_location="cpu")
+        (bestPerplexity, learning_rate, osd) = torch.load(modelFileName + '.optim')
         optimizer.load_state_dict(osd)
         for param_group in optimizer.param_groups:
             param_group['lr'] = learning_rate
@@ -79,32 +79,26 @@ if len(sys.argv) > 1 and (sys.argv[1] == 'train' or sys.argv[1] == 'extratrain')
     patience = 0
     iter = 0
     beginTime = time.time()
+
     for epoch in range(maxEpochs):
         np.random.shuffle(idx)
         targetWords = 0
         trainTime = time.time()
         for b in range(0, len(idx), batchSize):
             iter += 1
-            sourceBatch = []
-            targetBatch = []
-            i = b
-            while len(sourceBatch) != batchSize and i < len(idx):
-                if len(sourceCorpus[idx[i]]) > 1:
-                    sourceBatch.append(sourceCorpus[idx[i]])
-                    targetBatch.append(targetCorpus[idx[i]])
-                else:
-                    b += 1
-
-                i += 1
+            sourceBatch = [sourceCorpus[i] for i in idx[b:min(b + batchSize, len(idx))]]
+            targetBatch = [targetCorpus[i] for i in idx[b:min(b + batchSize, len(idx))]]
 
             st = sorted(list(zip(sourceBatch, targetBatch)), key=lambda e: len(e[0]), reverse=True)
             (sourceBatch, targetBatch) = tuple(zip(*st))
             targetWords += sum(len(s) - 1 for s in targetBatch)
-            H = nmt(sourceBatch, targetBatch)
+
             optimizer.zero_grad()
+            H = nmt(sourceBatch, targetBatch)
             H.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(nmt.parameters(), clip_grad)
             optimizer.step()
+
             if iter % log_every == 0:
                 print("Iteration:", iter, "Epoch:", epoch + 1, '/', maxEpochs, ", Batch:", b // batchSize + 1, '/',
                       len(idx) // batchSize + 1, ", loss: ", H.item(), "words/sec:",
@@ -154,8 +148,8 @@ if len(sys.argv) > 1 and (sys.argv[1] == 'train' or sys.argv[1] == 'extratrain')
 if len(sys.argv) > 3 and sys.argv[1] == 'perplexity':
     (sourceWord2ind, targetWord2ind) = pickle.load(open(wordsDataFileName, 'rb'))
 
-    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, sourceWord2ind, targetWord2ind,
-                         unkToken, padToken, endToken).to(device)
+    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, layers, device, sourceWord2ind, targetWord2ind,
+                         unkToken, padToken, endToken, startToken).to(device)
     nmt.load(modelFileName)
 
     sourceTest = utils.readCorpus(sys.argv[2])
@@ -169,18 +163,16 @@ if len(sys.argv) > 3 and sys.argv[1] == 'translate':
     (sourceWord2ind, targetWord2ind) = pickle.load(open(wordsDataFileName, 'rb'))
     sourceTest = utils.readCorpus(sys.argv[2])
 
-    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, encoderLayers, decoderLayers, sourceWord2ind, targetWord2ind,
-                         unkToken, padToken, endToken).to(device)
+    nmt = model.NMTmodel(wordEmbSize, hidSize, dropout, layers, device, sourceWord2ind, targetWord2ind,
+                         unkToken, padToken, endToken, startToken).to(device)
     nmt.load(modelFileName)
 
     nmt.eval()
-    file = open(sys.argv[3], 'w', encoding="utf8")
+    file = open(sys.argv[3], 'w')
     pb = utils.progressBar()
     pb.start(len(sourceTest))
     for s in sourceTest:
-        sent = nmt.translateSentence(s)
-        print(' '.join(sent))
-        file.write(' '.join(sent) + "\n")
+        file.write(' '.join(nmt.translateSentence(s)) + "\n")
         pb.tick()
     pb.stop()
 

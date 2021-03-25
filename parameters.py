@@ -9,26 +9,25 @@ corpusDataFileName = 'corpusData'
 wordsDataFileName = 'wordsData'
 modelFileName = 'NMTmodel'
 
-device = torch.device("cpu")
+device = torch.device("cuda:0")
 
 
-batchSize = 64
-wordEmbSize = 2048
+batchSize = 32
+wordEmbSize = 512
 
 hidSize = 512
 dropout = 0.5
 
-encoderLayers = 2
-decoderLayers = 2
+layers = 2
 
 uniform_init = 0.1
 learning_rate = 0.001
 clip_grad = 5
 learning_rate_decay = 0.5
 
-maxEpochs = 10
-log_every = 1
+maxEpochs = 20
+log_every = 250
 test_every = 1000
 
-max_patience = 5
-max_trials = 5
+max_patience = 2
+max_trials = 10
